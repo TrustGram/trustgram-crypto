@@ -74,7 +74,7 @@ export async function acceptSession(
         senderIdentityKey,
         senderEphemeralKey
     )
-    return initReceiverRatchet(masterSecret)
+    return initReceiverRatchet(masterSecret, myIdentity.signedPreKey)
 }
 
 // -------------------------

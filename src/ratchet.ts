@@ -51,13 +51,13 @@ export async function initSenderRatchet(
 }
 
 // Called by the session receiver (Bob) after X3DH
+// Bob uses his SPK as the initial ratchet key so Alice can derive the same chain
 export async function initReceiverRatchet(
-    masterSecret: ArrayBuffer
+    masterSecret: ArrayBuffer,
+    spkKeyPair: { privateKey: CryptoKey, publicKey: CryptoKey }
 ): Promise<RatchetState> {
-    const dhSendKey = await generateKeyPair()
-
     return {
-        dhSendKey,
+        dhSendKey: spkKeyPair,
         dhRecvKey: null,
         rootKey: masterSecret,
         sendChainKey: null,
