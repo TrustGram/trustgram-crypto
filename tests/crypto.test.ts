@@ -1,9 +1,8 @@
-import { test, expect, chromium } from "@playwright/test"
-import path from "path"
+import { test, expect } from "@playwright/test"
 
 // Load dist files in a real browser context
 test.beforeEach(async ({ page }) => {
-    await page.goto(`file://${path.resolve("tests/test.html")}`)
+    await page.goto("http://localhost:3000/tests/test.html")
     await page.waitForFunction(() => (window as any).__cryptoReady === true)
 })
 
