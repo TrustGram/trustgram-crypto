@@ -4,6 +4,7 @@ import path from "path"
 // Load dist files in a real browser context
 test.beforeEach(async ({ page }) => {
     await page.goto(`file://${path.resolve("tests/test.html")}`)
+    await page.waitForFunction(() => (window as any).__cryptoReady === true)
 })
 
 test("generateKeyPair returns a key pair", async ({ page }) => {
