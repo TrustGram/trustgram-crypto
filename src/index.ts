@@ -57,9 +57,14 @@ export async function acceptSession(
     senderIdentityKey: string,
     senderEphemeralKey: string
 ): Promise<RatchetState> {
-    const usedOPK = myIdentity.oneTimePreKeys.find(
-        async kp => await exportPublicKey(kp.publicKey) === usedOneTimePreKey
-    )
+    let usedOPK = null
+    for (const kp of myIdentity.oneTimePreKeys) {
+        const pub = await exportPublicKey(kp.publicKey)
+        if (pub === usedOneTimePreKey) {
+            usedOPK = kp
+            break
+        }
+    }
     if (!usedOPK) throw new Error("One-time pre-key not found")
 
     const masterSecret = await x3dhReceive(
@@ -104,8 +109,12 @@ export async function computeFingerprint(
     const myArr = new Uint8Array(myPubRaw)
     const theirArr = new Uint8Array(theirPubRaw)
 
-    // Sort so both sides compute the same fingerprint
-    const combined = myArr[0] < theirArr[0]
+    // Sort lexicographically so both sides compute the same fingerprint
+    let cmp = 0
+    for (let i = 0; i < myArr.length && cmp === 0; i++) {
+        cmp = myArr[i] - theirArr[i]
+    }
+    const combined = cmp < 0
         ? new Uint8Array([...myArr, ...theirArr])
         : new Uint8Array([...theirArr, ...myArr])
 

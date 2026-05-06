@@ -48,17 +48,17 @@ test("encrypt and decrypt round-trip", async ({ page }) => {
         }
 
         // Alice initiates session
-        const { state: aliceState } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
+        const { state: aliceState, senderInfo } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
 
         // Alice encrypts
-        const { message, state: aliceState2 } = await TrustGramCrypto.encryptMessage(aliceState, "hello bob")
+        const { message } = await TrustGramCrypto.encryptMessage(aliceState, "hello bob")
 
-        // Bob accepts session
+        // Bob accepts session using X3DH sender info
         const bobState = await TrustGramCrypto.acceptSession(
             bob,
             recipientBundle.oneTimePreKey,
-            (await TrustGramCrypto.getPublicBundle(alice)).identityKey,
-            message.dhPub
+            senderInfo.identityKey,
+            senderInfo.ephemeralKey
         )
 
         // Bob decrypts
@@ -96,7 +96,7 @@ test("tampered ciphertext fails to decrypt", async ({ page }) => {
             oneTimePreKey: bobPublicBundle.oneTimePreKeys[0]
         }
 
-        const { state: aliceState } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
+        const { state: aliceState, senderInfo } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
         const { message } = await TrustGramCrypto.encryptMessage(aliceState, "secret")
 
         // Tamper with ciphertext
@@ -105,8 +105,8 @@ test("tampered ciphertext fails to decrypt", async ({ page }) => {
         const bobState = await TrustGramCrypto.acceptSession(
             bob,
             recipientBundle.oneTimePreKey,
-            (await TrustGramCrypto.getPublicBundle(alice)).identityKey,
-            message.dhPub
+            senderInfo.identityKey,
+            senderInfo.ephemeralKey
         )
 
         try {
