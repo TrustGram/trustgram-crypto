@@ -1,0 +1,13 @@
+{
+  "name": "trustgram-crypto",
+  "version": "0.1.0",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "typescript": "^5.4.0"
+  }
+}
