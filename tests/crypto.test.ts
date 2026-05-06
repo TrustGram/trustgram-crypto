@@ -386,3 +386,102 @@ test("fingerprint display format is readable", async ({ page }) => {
     })
     expect(result).toMatch(/^[0-9a-f]{4}( [0-9a-f]{4})+$/)
 })
+
+// -------------------------
+// Edge cases
+// -------------------------
+
+test("out-of-order message delivery using skipped keys", async ({ page }) => {
+    const result = await page.evaluate(async () => {
+        const alice = await TrustGramCrypto.createIdentity()
+        const bob = await TrustGramCrypto.createIdentity()
+        const bobPublicBundle = await TrustGramCrypto.getPublicBundle(bob)
+        const recipientBundle = {
+            identityKey: bobPublicBundle.identityKey,
+            signedPreKey: bobPublicBundle.signedPreKey,
+            oneTimePreKey: bobPublicBundle.oneTimePreKeys[0]
+        }
+        const { state: aliceState0, senderInfo } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
+        let bobState = await TrustGramCrypto.acceptSession(
+            bob, recipientBundle.oneTimePreKey, senderInfo.identityKey, senderInfo.ephemeralKey
+        )
+
+        // Alice sends 3 messages in order (same DH key, no reply from Bob)
+        const { message: msg1, state: s1 } = await TrustGramCrypto.encryptMessage(aliceState0, "first")
+        const { message: msg2, state: s2 } = await TrustGramCrypto.encryptMessage(s1, "second")
+        const { message: msg3 } = await TrustGramCrypto.encryptMessage(s2, "third")
+
+        // Bob receives msg2 first (out of order) — msg1 gets stored as skipped
+        const { plaintext: plain2, state: bobState1 } = await TrustGramCrypto.decryptMessage(bobState, msg2)
+        // Bob decrypts msg1 from the skipped keys store
+        const { plaintext: plain1, state: bobState2 } = await TrustGramCrypto.decryptMessage(bobState1, msg1)
+        // Bob decrypts msg3 normally
+        const { plaintext: plain3 } = await TrustGramCrypto.decryptMessage(bobState2, msg3)
+
+        return [plain1, plain2, plain3]
+    })
+    expect(result).toEqual(["first", "second", "third"])
+})
+
+test("too many skipped messages throws", async ({ page }) => {
+    const error = await page.evaluate(async () => {
+        const alice = await TrustGramCrypto.createIdentity()
+        const bob = await TrustGramCrypto.createIdentity()
+        const bobPublicBundle = await TrustGramCrypto.getPublicBundle(bob)
+        const recipientBundle = {
+            identityKey: bobPublicBundle.identityKey,
+            signedPreKey: bobPublicBundle.signedPreKey,
+            oneTimePreKey: bobPublicBundle.oneTimePreKeys[0]
+        }
+        const { state: aliceState0, senderInfo } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
+        let bobState = await TrustGramCrypto.acceptSession(
+            bob, recipientBundle.oneTimePreKey, senderInfo.identityKey, senderInfo.ephemeralKey
+        )
+
+        // Alice sends 102 messages; Bob only receives the last one (n=101, gap > MAX_SKIP=100)
+        let aliceState = aliceState0
+        let lastMessage: any
+        for (let i = 0; i < 102; i++) {
+            const { message, state } = await TrustGramCrypto.encryptMessage(aliceState, `msg ${i}`)
+            aliceState = state
+            lastMessage = message
+        }
+
+        try {
+            await TrustGramCrypto.decryptMessage(bobState, lastMessage)
+            return null
+        } catch (e: any) {
+            return e.message
+        }
+    })
+    expect(error).toBe("Too many skipped messages")
+})
+
+test("acceptSession throws with unknown one-time pre-key", async ({ page }) => {
+    const error = await page.evaluate(async () => {
+        const alice = await TrustGramCrypto.createIdentity()
+        const bob = await TrustGramCrypto.createIdentity()
+        const alicePublicBundle = await TrustGramCrypto.getPublicBundle(alice)
+        const bobPublicBundle = await TrustGramCrypto.getPublicBundle(bob)
+        const recipientBundle = {
+            identityKey: bobPublicBundle.identityKey,
+            signedPreKey: bobPublicBundle.signedPreKey,
+            oneTimePreKey: bobPublicBundle.oneTimePreKeys[0]
+        }
+        const { senderInfo } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
+
+        try {
+            // Pass Alice's identity key as OPK — it won't match any of Bob's OPKs
+            await TrustGramCrypto.acceptSession(
+                bob,
+                alicePublicBundle.identityKey,
+                senderInfo.identityKey,
+                senderInfo.ephemeralKey
+            )
+            return null
+        } catch (e: any) {
+            return e.message
+        }
+    })
+    expect(error).toBe("One-time pre-key not found")
+})
