@@ -1,24 +1,32 @@
-// Low-level Web Crypto API wrappers.
-// No business logic here — only raw cryptographic operations.
+/**
+ * Low-level Web Crypto API wrappers.
+ * No business logic here — only raw cryptographic primitives.
+ */
 
-import type { KeyPair } from "./types.ts"
+import type { KeyPair } from "./types"
 
 // -------------------------
 // Encoding helpers
 // -------------------------
 
+/** Encode an ArrayBuffer to a base64 string. */
 export function toBase64(buf: ArrayBuffer): string {
     return btoa(String.fromCharCode(...new Uint8Array(buf)))
 }
 
+/** Decode a base64 string back to an ArrayBuffer. */
 export function fromBase64(b64: string): ArrayBuffer {
     return Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer
 }
 
 // -------------------------
-// ECDH
+// ECDH P-256
 // -------------------------
 
+/**
+ * Generate a non-extractable ECDH P-256 key pair.
+ * Private key is marked non-extractable so raw bytes never leave WebCrypto.
+ */
 export async function generateKeyPair(): Promise<KeyPair> {
     return crypto.subtle.generateKey(
         { name: "ECDH", namedCurve: "P-256" },
@@ -27,11 +35,13 @@ export async function generateKeyPair(): Promise<KeyPair> {
     ) as Promise<KeyPair>
 }
 
+/** Export a public key as a base64-encoded raw (uncompressed) point. */
 export async function exportPublicKey(key: CryptoKey): Promise<string> {
     const raw = await crypto.subtle.exportKey("raw", key)
     return toBase64(raw)
 }
 
+/** Import a base64-encoded raw public key for use in ECDH. */
 export async function importPublicKey(b64: string): Promise<CryptoKey> {
     return crypto.subtle.importKey(
         "raw",
@@ -42,6 +52,7 @@ export async function importPublicKey(b64: string): Promise<CryptoKey> {
     )
 }
 
+/** Compute a 256-bit ECDH shared secret from a private key and a peer's public key. */
 export async function deriveBits(privateKey: CryptoKey, publicKey: CryptoKey): Promise<ArrayBuffer> {
     return crypto.subtle.deriveBits(
         { name: "ECDH", public: publicKey },
@@ -51,9 +62,13 @@ export async function deriveBits(privateKey: CryptoKey, publicKey: CryptoKey): P
 }
 
 // -------------------------
-// HKDF
+// HKDF-SHA-256
 // -------------------------
 
+/**
+ * Derive `length` bytes from `inputKey` using HKDF-SHA-256.
+ * @param length Output length in bytes (default 32).
+ */
 export async function hkdf(
     inputKey: ArrayBuffer,
     salt: ArrayBuffer,
@@ -75,7 +90,10 @@ export async function hkdf(
     )
 }
 
-// Derive two keys from one input (root key derivation in Double Ratchet)
+/**
+ * Derive two 32-byte keys from one input (64 bytes of HKDF output, split in half).
+ * Used for the Double Ratchet root-key step: new root key + new chain key.
+ */
 export async function hkdfExpand(
     inputKey: ArrayBuffer,
     salt: ArrayBuffer,
@@ -92,12 +110,17 @@ export async function hkdfExpand(
 // AES-256-GCM
 // -------------------------
 
+/** Import raw bytes as an AES-256-GCM CryptoKey. */
 export async function importAESKey(raw: ArrayBuffer): Promise<CryptoKey> {
     return crypto.subtle.importKey(
         "raw", raw, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
     )
 }
 
+/**
+ * Encrypt a UTF-8 string with AES-256-GCM using a fresh random 96-bit IV.
+ * @returns Base64-encoded IV and ciphertext (includes GCM auth tag).
+ */
 export async function aesEncrypt(
     keyBytes: ArrayBuffer,
     plaintext: string
@@ -116,6 +139,10 @@ export async function aesEncrypt(
     }
 }
 
+/**
+ * Decrypt AES-256-GCM ciphertext.
+ * Throws `OperationError` if authentication tag is invalid (tampered data or wrong key).
+ */
 export async function aesDecrypt(
     keyBytes: ArrayBuffer,
     iv: string,
@@ -134,6 +161,7 @@ export async function aesDecrypt(
 // SHA-256
 // -------------------------
 
+/** Compute SHA-256 of an ArrayBuffer. */
 export async function sha256(data: ArrayBuffer): Promise<ArrayBuffer> {
     return crypto.subtle.digest("SHA-256", data)
 }

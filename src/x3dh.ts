@@ -1,6 +1,16 @@
-// X3DH (Extended Triple Diffie-Hellman) key agreement protocol.
-// Used to establish an initial shared secret between two parties
-// without requiring both to be online simultaneously.
+/**
+ * X3DH (Extended Triple Diffie-Hellman) key agreement.
+ *
+ * Establishes a shared master secret between Alice and Bob without requiring
+ * both to be online at the same time. Alice fetches Bob's published keys,
+ * runs 4 ECDH operations, and sends Bob the public halves he needs to mirror them.
+ *
+ * Key roles:
+ *   IK  — long-term Identity Key
+ *   SPK — Signed Pre-Key (rotated periodically)
+ *   OPK — One-Time Pre-Key (consumed once, provides forward secrecy)
+ *   EK  — Ephemeral Key generated fresh by Alice for each session
+ */
 
 import type { KeyPair, RecipientKeyBundle, X3DHResult, PublicKeyBundle, IdentityKeyBundle } from "./types"
 import { generateKeyPair, exportPublicKey, importPublicKey, deriveBits, hkdf, toBase64 } from "./primitives"
@@ -11,6 +21,7 @@ const ONE_TIME_PREKEY_COUNT = 10
 // Bundle generation (Bob does this on first launch)
 // -------------------------
 
+/** Generate a full identity bundle: IK + SPK + 10 OPKs. Store result in IndexedDB. */
 export async function generateIdentityBundle(): Promise<IdentityKeyBundle> {
     const identityKey = await generateKeyPair()
     const signedPreKey = await generateKeyPair()
@@ -21,6 +32,7 @@ export async function generateIdentityBundle(): Promise<IdentityKeyBundle> {
     return { identityKey, signedPreKey, oneTimePreKeys }
 }
 
+/** Extract the public keys from an identity bundle for publishing to the server. */
 export async function exportPublicBundle(bundle: IdentityKeyBundle): Promise<PublicKeyBundle> {
     return {
         identityKey: await exportPublicKey(bundle.identityKey.publicKey),
@@ -35,6 +47,17 @@ export async function exportPublicBundle(bundle: IdentityKeyBundle): Promise<Pub
 // X3DH sender side (Alice)
 // -------------------------
 
+/**
+ * Alice's side of X3DH: derive a master secret from Bob's public bundle.
+ *
+ * Performs 4 ECDH operations:
+ *   DH1 = ECDH(IK_A, SPK_B)
+ *   DH2 = ECDH(EK_A, IK_B)
+ *   DH3 = ECDH(EK_A, SPK_B)
+ *   DH4 = ECDH(EK_A, OPK_B)
+ *
+ * @returns masterSecret and senderBundle (Alice's public keys for Bob to reproduce the secret).
+ */
 export async function x3dhSend(
     myIdentityKey: KeyPair,
     recipientBundle: RecipientKeyBundle
@@ -45,7 +68,6 @@ export async function x3dhSend(
     const theirSPK = await importPublicKey(recipientBundle.signedPreKey)
     const theirOPK = await importPublicKey(recipientBundle.oneTimePreKey)
 
-    // 4 ECDH operations
     const dh1 = await deriveBits(myIdentityKey.privateKey, theirSPK)  // IK_A + SPK_B
     const dh2 = await deriveBits(ephemeralKey.privateKey, theirIK)     // EK_A + IK_B
     const dh3 = await deriveBits(ephemeralKey.privateKey, theirSPK)    // EK_A + SPK_B
@@ -67,6 +89,17 @@ export async function x3dhSend(
 // X3DH receiver side (Bob)
 // -------------------------
 
+/**
+ * Bob's side of X3DH: reproduce Alice's master secret using his private keys.
+ *
+ * Mirrors Alice's 4 ECDH operations (ECDH is commutative):
+ *   DH1 = ECDH(SPK_B, IK_A)
+ *   DH2 = ECDH(IK_B,  EK_A)
+ *   DH3 = ECDH(SPK_B, EK_A)
+ *   DH4 = ECDH(OPK_B, EK_A)
+ *
+ * @returns The same masterSecret Alice computed, ready to seed the Double Ratchet.
+ */
 export async function x3dhReceive(
     myIdentityKey: KeyPair,
     mySignedPreKey: KeyPair,
@@ -77,7 +110,6 @@ export async function x3dhReceive(
     const theirIK = await importPublicKey(senderIdentityKeyB64)
     const theirEK = await importPublicKey(senderEphemeralKeyB64)
 
-    // Mirror of sender's 4 ECDH operations
     const dh1 = await deriveBits(mySignedPreKey.privateKey, theirIK)   // SPK_B + IK_A
     const dh2 = await deriveBits(myIdentityKey.privateKey, theirEK)     // IK_B + EK_A
     const dh3 = await deriveBits(mySignedPreKey.privateKey, theirEK)    // SPK_B + EK_A
@@ -90,20 +122,19 @@ export async function x3dhReceive(
 // Helpers
 // -------------------------
 
+/** Concatenate 4 ECDH outputs (128 bytes) and derive a 32-byte master secret via HKDF. */
 async function combineDH(
     dh1: ArrayBuffer,
     dh2: ArrayBuffer,
     dh3: ArrayBuffer,
     dh4: ArrayBuffer
 ): Promise<ArrayBuffer> {
-    // Concatenate all DH outputs
     const combined = new Uint8Array(128)
     combined.set(new Uint8Array(dh1), 0)
     combined.set(new Uint8Array(dh2), 32)
     combined.set(new Uint8Array(dh3), 64)
     combined.set(new Uint8Array(dh4), 96)
 
-    // HKDF to derive master secret
     const salt = new Uint8Array(32).fill(0).buffer
     return hkdf(combined.buffer, salt, "TrustGram_X3DH_v1")
 }

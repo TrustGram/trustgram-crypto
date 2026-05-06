@@ -1,6 +1,14 @@
-// Double Ratchet Algorithm
-// Provides forward secrecy and break-in recovery.
-// Each message is encrypted with a unique key derived from a ratcheting chain.
+/**
+ * Double Ratchet Algorithm.
+ *
+ * Combines a symmetric-key ratchet (chain key → message key) with a
+ * Diffie-Hellman ratchet (new DH key pair on every reply). Properties:
+ *   - Forward secrecy: past message keys are deleted after use.
+ *   - Break-in recovery: compromise of current state doesn't expose future messages.
+ *   - Out-of-order delivery: up to MAX_SKIP skipped keys are stored and retrieved as needed.
+ *
+ * State is immutable — every function returns a new RatchetState.
+ */
 
 import type { RatchetState, EncryptedMessage } from "./types"
 import {
@@ -16,13 +24,17 @@ import {
     fromBase64
 } from "./primitives"
 
-const MAX_SKIP = 100 // max skipped messages to store
+const MAX_SKIP = 100 // maximum number of skipped message keys to store
 
 // -------------------------
 // Initialize ratchet
 // -------------------------
 
-// Called by the session initiator (Alice) after X3DH
+/**
+ * Initialize Alice's ratchet state after X3DH.
+ * Immediately performs one DH ratchet step so Alice can start sending.
+ * @param theirPublicKeyB64 Bob's SPK public key (base64) — Alice's first DH target.
+ */
 export async function initSenderRatchet(
     masterSecret: ArrayBuffer,
     theirPublicKeyB64: string
@@ -50,8 +62,11 @@ export async function initSenderRatchet(
     }
 }
 
-// Called by the session receiver (Bob) after X3DH
-// Bob uses his SPK as the initial ratchet key so Alice can derive the same chain
+/**
+ * Initialize Bob's ratchet state after X3DH.
+ * Bob uses his SPK as the initial DH send key so Alice's first DH step
+ * (ECDH with Bob's SPK) produces the same chain key on both sides.
+ */
 export async function initReceiverRatchet(
     masterSecret: ArrayBuffer,
     spkKeyPair: { privateKey: CryptoKey, publicKey: CryptoKey }
@@ -73,6 +88,10 @@ export async function initReceiverRatchet(
 // Encrypt
 // -------------------------
 
+/**
+ * Encrypt one message, advancing the symmetric sending chain.
+ * DH send key is unchanged until a message from the other side is decrypted.
+ */
 export async function ratchetEncrypt(
     state: RatchetState,
     plaintext: string
@@ -103,11 +122,21 @@ export async function ratchetEncrypt(
 // Decrypt
 // -------------------------
 
+/**
+ * Decrypt one message, advancing the ratchet as needed.
+ *
+ * Three cases handled:
+ *   1. Skipped message — key is already stored in `state.skippedKeys`.
+ *   2. Same DH key as last received — advance symmetric chain only.
+ *   3. New DH key — perform DH ratchet step first, then advance symmetric chain.
+ *
+ * Throws if more than MAX_SKIP messages are skipped (DoS protection).
+ */
 export async function ratchetDecrypt(
     state: RatchetState,
     message: EncryptedMessage
 ): Promise<{ plaintext: string, state: RatchetState }> {
-    // Check if we have a skipped key for this message
+    // Case 1: out-of-order — key was saved during a previous decrypt
     const skipped = state.skippedKeys.find(
         k => k.dhKey === message.dhPub && k.n === message.n
     )
@@ -123,23 +152,19 @@ export async function ratchetDecrypt(
 
     let currentState = state
 
-    // DH ratchet step if we see a new DH public key
+    // Case 3: new DH key from sender → DH ratchet step
     const theirDhPub = await importPublicKey(message.dhPub)
     const isDHRatchetNeeded = !state.dhRecvKey ||
         await exportPublicKey(state.dhRecvKey) !== message.dhPub
 
     if (isDHRatchetNeeded) {
-        // Store skipped keys from current receiving chain
         currentState = await skipMessageKeys(currentState, message.pn)
-
-        // Perform DH ratchet
         currentState = await dhRatchetStep(currentState, theirDhPub)
     }
 
-    // Store skipped keys up to message.n
+    // Case 2 (and tail of case 3): advance symmetric chain to message.n
     currentState = await skipMessageKeys(currentState, message.n)
 
-    // Decrypt with next message key
     const { messageKey, nextChainKey } = await advanceChain(currentState.recvChainKey!)
     const plaintext = await aesDecrypt(messageKey, message.iv, message.ciphertext)
 
@@ -156,14 +181,13 @@ export async function ratchetDecrypt(
 // Internal helpers
 // -------------------------
 
+/** Perform one DH ratchet step: derive new recv chain, generate new DH send key, derive new send chain. */
 async function dhRatchetStep(state: RatchetState, theirPub: CryptoKey): Promise<RatchetState> {
-    // Derive new recv chain key
     const dh1 = await deriveBits(state.dhSendKey.privateKey, theirPub)
     const { key1: rootKey1, key2: recvChainKey } = await hkdfExpand(
         state.rootKey, dh1, "TrustGram_Ratchet_v1"
     )
 
-    // Generate new DH send key
     const newDhSendKey = await generateKeyPair()
     const dh2 = await deriveBits(newDhSendKey.privateKey, theirPub)
     const { key1: rootKey2, key2: sendChainKey } = await hkdfExpand(
@@ -183,6 +207,7 @@ async function dhRatchetStep(state: RatchetState, theirPub: CryptoKey): Promise<
     }
 }
 
+/** Advance a chain key once: derive message key and next chain key via HKDF. */
 async function advanceChain(
     chainKey: ArrayBuffer
 ): Promise<{ messageKey: ArrayBuffer, nextChainKey: ArrayBuffer }> {
@@ -192,6 +217,11 @@ async function advanceChain(
     return { messageKey, nextChainKey }
 }
 
+/**
+ * Advance the receiving chain to `until`, saving each derived key in skippedKeys.
+ * Called before decrypting so out-of-order messages can be decrypted later.
+ * Throws if the gap exceeds MAX_SKIP (prevents unbounded memory growth).
+ */
 async function skipMessageKeys(state: RatchetState, until: number): Promise<RatchetState> {
     if (until - state.recvCount > MAX_SKIP) {
         throw new Error("Too many skipped messages")
