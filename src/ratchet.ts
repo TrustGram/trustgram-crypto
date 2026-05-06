@@ -201,10 +201,10 @@ async function skipMessageKeys(state: RatchetState, until: number): Promise<Ratc
     const skippedKeys = [...state.skippedKeys]
     let recvCount = state.recvCount
 
-    while (recvCount < until && chainKey) {
-        const { messageKey, nextChainKey } = await advanceChain(chainKey)
+    while (recvCount < until) {
+        const { messageKey, nextChainKey } = await advanceChain(chainKey!)
         skippedKeys.push({
-            dhKey: state.dhRecvKey ? await exportPublicKey(state.dhRecvKey) : "",
+            dhKey: await exportPublicKey(state.dhRecvKey!),
             n: recvCount,
             messageKey
         })
