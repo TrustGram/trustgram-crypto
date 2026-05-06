@@ -3,7 +3,7 @@ import path from "path"
 
 // Load dist files in a real browser context
 test.beforeEach(async ({ page }) => {
-    await page.goto(`file://${path.resolve("dist/test.html")}`)
+    await page.goto(`file://${path.resolve("tests/test.html")}`)
 })
 
 test("generateKeyPair returns a key pair", async ({ page }) => {
