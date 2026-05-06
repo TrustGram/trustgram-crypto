@@ -13,7 +13,10 @@ export default defineConfig({
             coverage: {
                 entryFilter: (entry: any) => entry.url.includes("dist/crypto.js"),
                 sourceFilter: (sourcePath: string) => sourcePath.includes("src/"),
-                reports: ["v8", ["lcov", { outputFile: "lcov.info" }], ["console-summary"]]
+                reports: [
+                    ["v8"],
+                    ["console-summary"]
+                ]
             }
         }]
     ],

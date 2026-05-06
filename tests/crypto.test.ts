@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test"
+import MCR from "monocart-reporter"
 
 // Load dist files in a real browser context
 test.beforeEach(async ({ page }) => {
@@ -9,11 +10,7 @@ test.beforeEach(async ({ page }) => {
 
 test.afterEach(async ({ page }, testInfo) => {
     const coverage = await page.coverage.stopJSCoverage()
-    testInfo.attachments.push({
-        name: "coverage",
-        contentType: "text/plain",
-        body: Buffer.from(JSON.stringify(coverage))
-    })
+    await MCR.addCoverageReport(coverage, testInfo)
 })
 
 // -------------------------
