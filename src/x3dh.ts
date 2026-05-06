@@ -2,8 +2,8 @@
 // Used to establish an initial shared secret between two parties
 // without requiring both to be online simultaneously.
 
-import type { KeyPair, RecipientKeyBundle, X3DHResult, PublicKeyBundle, IdentityKeyBundle } from "./types.ts"
-import { generateKeyPair, exportPublicKey, importPublicKey, deriveBits, hkdf, toBase64 } from "./primitives.ts"
+import type { KeyPair, RecipientKeyBundle, X3DHResult, PublicKeyBundle, IdentityKeyBundle } from "./types"
+import { generateKeyPair, exportPublicKey, importPublicKey, deriveBits, hkdf, toBase64 } from "./primitives"
 
 const ONE_TIME_PREKEY_COUNT = 10
 

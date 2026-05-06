@@ -1,9 +1,9 @@
 // TrustGram Crypto — Public API
 // This is the only file trustgram-ui interacts with.
 
-import { generateIdentityBundle, exportPublicBundle, x3dhSend, x3dhReceive } from "./x3dh.ts"
-import { initSenderRatchet, initReceiverRatchet, ratchetEncrypt, ratchetDecrypt } from "./ratchet.ts"
-import { exportPublicKey, sha256, toBase64, fromBase64 } from "./primitives.ts"
+import { generateIdentityBundle, exportPublicBundle, x3dhSend, x3dhReceive } from "./x3dh"
+import { initSenderRatchet, initReceiverRatchet, ratchetEncrypt, ratchetDecrypt } from "./ratchet"
+import { exportPublicKey, sha256, toBase64, fromBase64 } from "./primitives"
 import type {
     IdentityKeyBundle,
     PublicKeyBundle,

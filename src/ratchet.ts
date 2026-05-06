@@ -2,7 +2,7 @@
 // Provides forward secrecy and break-in recovery.
 // Each message is encrypted with a unique key derived from a ratcheting chain.
 
-import type { RatchetState, EncryptedMessage } from "./types.ts"
+import type { RatchetState, EncryptedMessage } from "./types"
 import {
     generateKeyPair,
     exportPublicKey,
@@ -14,7 +14,7 @@ import {
     aesDecrypt,
     toBase64,
     fromBase64
-} from "./primitives.ts"
+} from "./primitives"
 
 const MAX_SKIP = 100 // max skipped messages to store
 
