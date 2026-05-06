@@ -2,8 +2,18 @@ import { test, expect } from "@playwright/test"
 
 // Load dist files in a real browser context
 test.beforeEach(async ({ page }) => {
+    await page.coverage.startJSCoverage()
     await page.goto("http://localhost:3000/tests/test.html")
     await page.waitForFunction(() => (window as any).__cryptoReady === true)
+})
+
+test.afterEach(async ({ page }, testInfo) => {
+    const coverage = await page.coverage.stopJSCoverage()
+    testInfo.attachments.push({
+        name: "coverage",
+        contentType: "text/plain",
+        body: Buffer.from(JSON.stringify(coverage))
+    })
 })
 
 // -------------------------

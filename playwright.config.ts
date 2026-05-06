@@ -5,6 +5,18 @@ export default defineConfig({
     use: {
         browserName: "chromium"
     },
+    reporter: [
+        ["list"],
+        ["monocart-reporter", {
+            name: "TrustGram Crypto Coverage",
+            outputFile: "coverage/index.html",
+            coverage: {
+                entryFilter: (entry: any) => entry.url.includes("dist/crypto.js"),
+                sourceFilter: (sourcePath: string) => sourcePath.includes("src/"),
+                reports: ["v8", ["lcov", { outputFile: "lcov.info" }], ["console-summary"]]
+            }
+        }]
+    ],
     webServer: {
         command: "npx serve . -p 3000 --no-clipboard",
         url: "http://localhost:3000",
