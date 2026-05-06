@@ -1,34 +1,117 @@
 # trustgram-crypto
 
-TrustGram cryptographic engine — isolated crypto module.
+End-to-end encryption library for [TrustGram](https://github.com/trustgram) — a zero-trust messenger built on top of Telegram.
 
-## Purpose
-All cryptographic primitives are isolated here for auditability.
-Anyone can verify this code independently via browser DevTools (F12 → Sources).
+Implements **X3DH + Double Ratchet** entirely in the browser using the Web Crypto API. No native dependencies, no server-side key material.
 
-## Stack
-- Vanilla JS, zero dependencies
-- Web Crypto API only (built-in browser primitives)
-- Hosted on Cloudflare Pages
+## How it fits in TrustGram
 
-## Deploy
-Production: https://trustgram-crypto.pages.dev/crypto.js
+```
+trustgram-ui  ──imports──▶  trustgram-crypto  (this repo)
+                                    │
+                            Web Crypto API
+                            (browser built-in)
 
-Automatic deployment on push to `main` via Cloudflare Pages.
-
-## Usage
-Include in trustgram-ui via SRI hash:
-```html
-<script src="https://trustgram-crypto.pages.dev/crypto.js" integrity="sha384-..."></script>
+trustgram-bot  ──delivers──▶  encrypted blobs via Telegram
+                               (never sees plaintext)
 ```
 
-## Algorithms
-- Key exchange: ECDH P-256
-- Encryption: AES-256-GCM
-- Key derivation: HKDF SHA-256
+The bot and server are **zero-trust** — they only relay opaque ciphertext. All cryptographic operations happen client-side.
+
+## Security properties
+
+| Property | Mechanism |
+|---|---|
+| Confidentiality | AES-256-GCM per message |
+| Forward secrecy | Symmetric ratchet — past keys deleted after use |
+| Break-in recovery | DH ratchet — new key pair on every reply |
+| Asynchronous setup | X3DH — session starts without Bob being online |
+| Out-of-order delivery | Skipped message keys stored up to 100 deep |
+| MITM detection | Safety numbers (SHA-256 of both identity keys) |
+| Key non-extractability | `extractable: false` in WebCrypto — private keys never leave the browser |
+
+## API
+
+```typescript
+import {
+    createIdentity,
+    getPublicBundle,
+    initiateSession,
+    acceptSession,
+    encryptMessage,
+    decryptMessage,
+    computeFingerprint
+} from "./dist/crypto.js"
+
+// --- First launch ---
+const aliceIdentity = await createIdentity()
+const alicePublic   = await getPublicBundle(aliceIdentity)  // publish to server
+
+// --- Alice initiates session with Bob ---
+const bobBundle = /* fetch from server */ { identityKey, signedPreKey, oneTimePreKey }
+const { state: aliceState, senderInfo } = await initiateSession(aliceIdentity, bobBundle)
+// send senderInfo to Bob via Telegram
+
+// --- Bob accepts ---
+const bobState = await acceptSession(
+    bobIdentity,
+    senderInfo.oneTimePreKeyId,
+    senderInfo.identityKey,
+    senderInfo.ephemeralKey
+)
+
+// --- Messaging ---
+const { message, state: aliceState2 } = await encryptMessage(aliceState, "hello")
+const { plaintext, state: bobState2 } = await decryptMessage(bobState, message)
+
+// --- Safety numbers ---
+const fp = await computeFingerprint(aliceIdentity, bobPublic.identityKey)
+console.log(fp.display) // "1a2b 3c4d 5e6f ..."  — compare out-of-band
+```
+
+> **Important:** `RatchetState` is immutable. Always use the `state` returned from each call for the next operation.
+
+## Build
+
+```bash
+npm install
+npm run build        # outputs dist/crypto.js + dist/crypto.js.map
+```
+
+Bundled with [esbuild](https://esbuild.github.io/) — single ESM file, no module resolution issues in the browser.
+
+## Test
+
+```bash
+npx playwright install chromium --with-deps   # first time only
+npx playwright test
+```
+
+Tests run in a real Chromium browser to ensure Web Crypto API compatibility. Coverage is collected via V8 and reported by [monocart-reporter](https://github.com/cenfun/monocart-reporter).
+
+| Metric | Coverage |
+|---|---|
+| Statements | 100% |
+| Branches | 100% |
+| Functions | 100% |
+| Lines | 100% |
+
+CI runs on every push to `main` via GitHub Actions. Coverage report is uploaded as an artifact.
 
 ## Verifying integrity
-```bash
-curl https://trustgram-crypto.pages.dev/crypto.js | openssl dgst -sha384 -binary | base64
+
+The build is hosted on Cloudflare Pages. `trustgram-ui` loads it via SRI hash to guarantee the code hasn't been tampered with:
+
+```html
+<script src="https://trustgram-crypto.pages.dev/dist/crypto.js" integrity="sha384-..."></script>
 ```
-Compare the output with the `integrity` attribute in trustgram-ui `index.html`.
+
+Verify manually:
+
+```bash
+curl https://trustgram-crypto.pages.dev/dist/crypto.js | openssl dgst -sha384 -binary | base64
+```
+
+## Documentation
+
+- [Technical reference](docs/TECHNICAL.md) — protocol details, file structure, security analysis, how to extend the library
