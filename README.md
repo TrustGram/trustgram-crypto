@@ -114,4 +114,12 @@ curl https://trustgram-crypto.pages.dev/dist/crypto.js | openssl dgst -sha384 -b
 
 ## Documentation
 
-- [Technical reference](docs/TECHNICAL.md) — protocol details, file structure, security analysis, how to extend the library
+Full documentation is available in the [Wiki](https://github.com/TrustGram/trustgram-crypto/wiki):
+
+| Page | Description |
+|---|---|
+| [Getting Started](https://github.com/TrustGram/trustgram-crypto/wiki/Getting-Started) | Install, build, run tests |
+| [API Reference](https://github.com/TrustGram/trustgram-crypto/wiki/API-Reference) | All public functions with examples |
+| [Cryptography](https://github.com/TrustGram/trustgram-crypto/wiki/Cryptography) | X3DH + Double Ratchet in detail |
+| [Security Model](https://github.com/TrustGram/trustgram-crypto/wiki/Security-Model) | Threat model, guarantees, limitations |
+| [Development Guide](https://github.com/TrustGram/trustgram-crypto/wiki/Development-Guide) | File structure, adding tests, extending the library |
