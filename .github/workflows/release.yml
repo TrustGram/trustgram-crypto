@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Playwright
+        run: npx playwright install chromium --with-deps
+
+      - name: Run tests
+        run: npx playwright test
+
+      - name: Compute SRI hash
+        id: sri
+        run: |
+          HASH=$(cat dist/crypto.js | openssl dgst -sha384 -binary | base64 -w 0)
+          echo "hash=sha384-${HASH}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/crypto.js
+            dist/crypto.js.map
+          body: |
+            ## TrustGram Crypto ${{ github.ref_name }}
+
+            ### SRI Hash
+            Use this integrity hash when loading the script from CDN:
+            ```
+            integrity="${{ steps.sri.outputs.hash }}"
+            ```
+
+            ```html
+            <script type="module"
+              src="https://trustgram-crypto.pages.dev/dist/crypto.js"
+              integrity="${{ steps.sri.outputs.hash }}">
+            </script>
+            ```
