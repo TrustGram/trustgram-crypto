@@ -1,9 +1,13 @@
 {
   "name": "trustgram-crypto",
   "version": "0.1.0",
+  "type": "module",
+  "exports": "./dist/crypto.js",
+  "files": ["dist"],
   "scripts": {
     "build": "esbuild src/index.ts --bundle --format=esm --sourcemap --outfile=dist/crypto.js",
     "dev": "esbuild src/index.ts --bundle --format=esm --sourcemap --outfile=dist/crypto.js --watch",
+    "prepare": "npm run build",
     "test": "playwright test"
   },
   "devDependencies": {
