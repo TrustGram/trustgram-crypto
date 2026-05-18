@@ -24,9 +24,9 @@ export interface PublicKeyBundle {
 
 /** Server response when Alice fetches Bob's keys. Server removes the OPK after delivery. */
 export interface RecipientKeyBundle {
-    identityKey: string    // base64
-    signedPreKey: string   // base64
-    oneTimePreKey: string  // base64 (one, server removes it after)
+    identityKey: string       // base64
+    signedPreKey: string      // base64
+    oneTimePreKey: string | null  // base64, or null if pool is exhausted
 }
 
 // -------------------------
@@ -35,9 +35,9 @@ export interface RecipientKeyBundle {
 
 /** What Alice sends to Bob so he can reproduce the X3DH master secret. */
 export interface X3DHSenderBundle {
-    identityKey: string     // base64 — Alice's IK pub
-    ephemeralKey: string    // base64 — Alice's EK pub
-    oneTimePreKeyId: string // which OPK was used (Bob needs it to find the private half)
+    identityKey: string          // base64 — Alice's IK pub
+    ephemeralKey: string         // base64 — Alice's EK pub
+    oneTimePreKeyId: string | null  // OPK used, or null if no OPK was available
 }
 
 export interface X3DHResult {

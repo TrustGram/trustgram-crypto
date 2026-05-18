@@ -66,21 +66,26 @@ export async function x3dhSend(
 
     const theirIK = await importPublicKey(recipientBundle.identityKey)
     const theirSPK = await importPublicKey(recipientBundle.signedPreKey)
-    const theirOPK = await importPublicKey(recipientBundle.oneTimePreKey)
 
     const dh1 = await deriveBits(myIdentityKey.privateKey, theirSPK)  // IK_A + SPK_B
     const dh2 = await deriveBits(ephemeralKey.privateKey, theirIK)     // EK_A + IK_B
     const dh3 = await deriveBits(ephemeralKey.privateKey, theirSPK)    // EK_A + SPK_B
-    const dh4 = await deriveBits(ephemeralKey.privateKey, theirOPK)    // EK_A + OPK_B
 
-    const masterSecret = await combineDH(dh1, dh2, dh3, dh4)
+    let masterSecret: ArrayBuffer
+    if (recipientBundle.oneTimePreKey) {
+        const theirOPK = await importPublicKey(recipientBundle.oneTimePreKey)
+        const dh4 = await deriveBits(ephemeralKey.privateKey, theirOPK)  // EK_A + OPK_B
+        masterSecret = await combineDH(dh1, dh2, dh3, dh4)
+    } else {
+        masterSecret = await combineDH3(dh1, dh2, dh3)
+    }
 
     return {
         masterSecret,
         senderBundle: {
             identityKey: await exportPublicKey(myIdentityKey.publicKey),
             ephemeralKey: await exportPublicKey(ephemeralKey.publicKey),
-            oneTimePreKeyId: recipientBundle.oneTimePreKey
+            oneTimePreKeyId: recipientBundle.oneTimePreKey ?? null
         }
     }
 }
@@ -103,7 +108,7 @@ export async function x3dhSend(
 export async function x3dhReceive(
     myIdentityKey: KeyPair,
     mySignedPreKey: KeyPair,
-    myOneTimePreKey: KeyPair,
+    myOneTimePreKey: KeyPair | null,
     senderIdentityKeyB64: string,
     senderEphemeralKeyB64: string
 ): Promise<ArrayBuffer> {
@@ -113,9 +118,12 @@ export async function x3dhReceive(
     const dh1 = await deriveBits(mySignedPreKey.privateKey, theirIK)   // SPK_B + IK_A
     const dh2 = await deriveBits(myIdentityKey.privateKey, theirEK)     // IK_B + EK_A
     const dh3 = await deriveBits(mySignedPreKey.privateKey, theirEK)    // SPK_B + EK_A
-    const dh4 = await deriveBits(myOneTimePreKey.privateKey, theirEK)   // OPK_B + EK_A
 
-    return combineDH(dh1, dh2, dh3, dh4)
+    if (myOneTimePreKey) {
+        const dh4 = await deriveBits(myOneTimePreKey.privateKey, theirEK)  // OPK_B + EK_A
+        return combineDH(dh1, dh2, dh3, dh4)
+    }
+    return combineDH3(dh1, dh2, dh3)
 }
 
 // -------------------------
@@ -134,6 +142,21 @@ async function combineDH(
     combined.set(new Uint8Array(dh2), 32)
     combined.set(new Uint8Array(dh3), 64)
     combined.set(new Uint8Array(dh4), 96)
+
+    const salt = new Uint8Array(32).fill(0).buffer
+    return hkdf(combined.buffer, salt, "TrustGram_X3DH_v1")
+}
+
+/** Concatenate 3 ECDH outputs (96 bytes) when no OPK is available. */
+async function combineDH3(
+    dh1: ArrayBuffer,
+    dh2: ArrayBuffer,
+    dh3: ArrayBuffer
+): Promise<ArrayBuffer> {
+    const combined = new Uint8Array(96)
+    combined.set(new Uint8Array(dh1), 0)
+    combined.set(new Uint8Array(dh2), 32)
+    combined.set(new Uint8Array(dh3), 64)
 
     const salt = new Uint8Array(32).fill(0).buffer
     return hkdf(combined.buffer, salt, "TrustGram_X3DH_v1")

@@ -89,19 +89,21 @@ export async function initiateSession(
  */
 export async function acceptSession(
     myIdentity: IdentityKeyBundle,
-    usedOneTimePreKey: string,
+    usedOneTimePreKey: string | null,
     senderIdentityKey: string,
     senderEphemeralKey: string
 ): Promise<RatchetState> {
     let usedOPK = null
-    for (const kp of myIdentity.oneTimePreKeys) {
-        const pub = await exportPublicKey(kp.publicKey)
-        if (pub === usedOneTimePreKey) {
-            usedOPK = kp
-            break
+    if (usedOneTimePreKey) {
+        for (const kp of myIdentity.oneTimePreKeys) {
+            const pub = await exportPublicKey(kp.publicKey)
+            if (pub === usedOneTimePreKey) {
+                usedOPK = kp
+                break
+            }
         }
+        if (!usedOPK) throw new Error("One-time pre-key not found")
     }
-    if (!usedOPK) throw new Error("One-time pre-key not found")
 
     const masterSecret = await x3dhReceive(
         myIdentity.identityKey,
