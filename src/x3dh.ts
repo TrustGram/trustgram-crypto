@@ -13,7 +13,19 @@
  */
 
 import type { KeyPair, RecipientKeyBundle, X3DHResult, PublicKeyBundle, IdentityKeyBundle } from "./types"
-import { generateKeyPair, exportPublicKey, importPublicKey, deriveBits, hkdf, toBase64 } from "./primitives"
+import {
+    generateKeyPair,
+    generateSigningKeyPair,
+    exportPublicKey,
+    exportSigningPublicKey,
+    importPublicKey,
+    importSigningPublicKey,
+    deriveBits,
+    hkdf,
+    fromBase64,
+    ecdsaSign,
+    ecdsaVerify
+} from "./primitives"
 
 const ONE_TIME_PREKEY_COUNT = 10
 
@@ -21,25 +33,54 @@ const ONE_TIME_PREKEY_COUNT = 10
 // Bundle generation (Bob does this on first launch)
 // -------------------------
 
-/** Generate a full identity bundle: IK + SPK + 10 OPKs. Store result in IndexedDB. */
+/** Generate a full identity bundle: IK + signingKey + SPK + 10 OPKs. Store result in IndexedDB. */
 export async function generateIdentityBundle(): Promise<IdentityKeyBundle> {
     const identityKey = await generateKeyPair()
+    const signingKey = await generateSigningKeyPair()
     const signedPreKey = await generateKeyPair()
     const oneTimePreKeys: KeyPair[] = []
     for (let i = 0; i < ONE_TIME_PREKEY_COUNT; i++) {
         oneTimePreKeys.push(await generateKeyPair())
     }
-    return { identityKey, signedPreKey, oneTimePreKeys }
+    return { identityKey, signingKey, signedPreKey, oneTimePreKeys }
+}
+
+/** Sign a signed-pre-key public byte string with the identity's signing key. */
+export async function signSignedPreKey(
+    signingKey: KeyPair,
+    signedPreKeyPub: CryptoKey
+): Promise<string> {
+    const rawSpk = await crypto.subtle.exportKey("raw", signedPreKeyPub)
+    return ecdsaSign(signingKey.privateKey, rawSpk)
 }
 
 /** Extract the public keys from an identity bundle for publishing to the server. */
 export async function exportPublicBundle(bundle: IdentityKeyBundle): Promise<PublicKeyBundle> {
+    const signedPreKeySignature = await signSignedPreKey(bundle.signingKey, bundle.signedPreKey.publicKey)
     return {
         identityKey: await exportPublicKey(bundle.identityKey.publicKey),
+        signingKey: await exportSigningPublicKey(bundle.signingKey.publicKey),
         signedPreKey: await exportPublicKey(bundle.signedPreKey.publicKey),
+        signedPreKeySignature,
         oneTimePreKeys: await Promise.all(
             bundle.oneTimePreKeys.map(kp => exportPublicKey(kp.publicKey))
         )
+    }
+}
+
+/**
+ * Verify a peer's SPK signature using their signingKey.
+ * Throws if the signature is invalid — preventing MITM via a malicious server.
+ */
+export async function verifyRecipientBundle(bundle: RecipientKeyBundle): Promise<void> {
+    if (!bundle.signedPreKeySignature) {
+        throw new Error("Recipient bundle is missing SPK signature")
+    }
+    const signingPub = await importSigningPublicKey(bundle.signingKey)
+    const rawSpk = fromBase64(bundle.signedPreKey)
+    const ok = await ecdsaVerify(signingPub, bundle.signedPreKeySignature, rawSpk)
+    if (!ok) {
+        throw new Error("Invalid SPK signature — possible MITM attack")
     }
 }
 
@@ -62,6 +103,9 @@ export async function x3dhSend(
     myIdentityKey: KeyPair,
     recipientBundle: RecipientKeyBundle
 ): Promise<X3DHResult> {
+    // Authenticate Bob's SPK *before* deriving any secret with it.
+    await verifyRecipientBundle(recipientBundle)
+
     const ephemeralKey = await generateKeyPair()
 
     const theirIK = await importPublicKey(recipientBundle.identityKey)

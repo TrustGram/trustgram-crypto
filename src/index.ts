@@ -14,9 +14,9 @@
  *   7. Optionally: both sides call `computeFingerprint` and compare out-of-band to detect MITM.
  */
 
-import { generateIdentityBundle, exportPublicBundle, x3dhSend, x3dhReceive } from "./x3dh"
+import { generateIdentityBundle, exportPublicBundle, x3dhSend, x3dhReceive, signSignedPreKey } from "./x3dh"
 import { initSenderRatchet, initReceiverRatchet, ratchetEncrypt, ratchetDecrypt } from "./ratchet"
-import { exportPublicKey, sha256, toBase64, fromBase64 } from "./primitives"
+import { exportPublicKey, exportSigningPublicKey, sha256, fromBase64 } from "./primitives"
 import type {
     IdentityKeyBundle,
     PublicKeyBundle,
@@ -54,6 +54,19 @@ export async function createIdentity(): Promise<IdentityKeyBundle> {
  */
 export async function getPublicBundle(identity: IdentityKeyBundle): Promise<PublicKeyBundle> {
     return exportPublicBundle(identity)
+}
+
+/**
+ * Sign a freshly-rotated signed pre-key with the identity's long-term signing key.
+ * Used when rotating the SPK without regenerating the rest of the identity.
+ *
+ * @returns base64 ECDSA signature over the raw public-key bytes.
+ */
+export async function signSPK(
+    identity: IdentityKeyBundle,
+    newSignedPreKey: { publicKey: CryptoKey }
+): Promise<string> {
+    return signSignedPreKey(identity.signingKey, newSignedPreKey.publicKey)
 }
 
 // -------------------------
@@ -149,32 +162,42 @@ export async function decryptMessage(
 // -------------------------
 
 /**
- * Compute a safety number from both parties' identity keys.
+ * Compute a safety number from both parties' identity material.
  *
- * Both users compute the same value regardless of who initiates — keys are sorted
- * lexicographically before hashing so the result is order-independent.
- * Users should compare `display` out-of-band (voice, in person) to detect MITM.
+ * Binds **both** the ECDH identityKey and the ECDSA signingKey of each side —
+ * otherwise an attacker could swap one half without affecting the fingerprint.
  *
- * @param theirIdentityKeyB64 The other party's identity public key (base64).
+ * Both users compute the same value regardless of who initiates — each side's
+ * (identityKey || signingKey) is concatenated, then the two halves are sorted
+ * lexicographically before hashing.
  */
 export async function computeFingerprint(
     myIdentity: IdentityKeyBundle,
-    theirIdentityKeyB64: string
+    theirIdentityKeyB64: string,
+    theirSigningKeyB64: string
 ): Promise<Fingerprint> {
-    const myPubRaw = await crypto.subtle.exportKey("raw", myIdentity.identityKey.publicKey)
-    const theirPubRaw = fromBase64(theirIdentityKeyB64)
+    const myIdRaw = new Uint8Array(await crypto.subtle.exportKey("raw", myIdentity.identityKey.publicKey))
+    const mySignRaw = new Uint8Array(fromBase64(await exportSigningPublicKey(myIdentity.signingKey.publicKey)))
+    const myHalf = new Uint8Array(myIdRaw.length + mySignRaw.length)
+    myHalf.set(myIdRaw, 0)
+    myHalf.set(mySignRaw, myIdRaw.length)
 
-    const myArr = new Uint8Array(myPubRaw)
-    const theirArr = new Uint8Array(theirPubRaw)
+    const theirIdRaw = new Uint8Array(fromBase64(theirIdentityKeyB64))
+    const theirSignRaw = new Uint8Array(fromBase64(theirSigningKeyB64))
+    const theirHalf = new Uint8Array(theirIdRaw.length + theirSignRaw.length)
+    theirHalf.set(theirIdRaw, 0)
+    theirHalf.set(theirSignRaw, theirIdRaw.length)
 
-    // Lexicographic sort so both sides compute the same combined input
     let cmp = 0
-    for (let i = 0; i < myArr.length && cmp === 0; i++) {
-        cmp = myArr[i] - theirArr[i]
+    const minLen = Math.min(myHalf.length, theirHalf.length)
+    for (let i = 0; i < minLen && cmp === 0; i++) {
+        cmp = myHalf[i] - theirHalf[i]
     }
+    if (cmp === 0) cmp = myHalf.length - theirHalf.length
+
     const combined = cmp < 0
-        ? new Uint8Array([...myArr, ...theirArr])
-        : new Uint8Array([...theirArr, ...myArr])
+        ? new Uint8Array([...myHalf, ...theirHalf])
+        : new Uint8Array([...theirHalf, ...myHalf])
 
     const hash = await sha256(combined.buffer)
     const hex = Array.from(new Uint8Array(hash))

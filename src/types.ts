@@ -8,25 +8,30 @@ export interface KeyPair {
     publicKey: CryptoKey
 }
 
-/** Full identity stored locally: IK + SPK + 10 OPKs (all with private keys). */
+/** Full identity stored locally: IK + signingKey + SPK + 10 OPKs (all with private keys). */
 export interface IdentityKeyBundle {
-    identityKey: KeyPair
+    identityKey: KeyPair        // ECDH P-256 — used for X3DH
+    signingKey: KeyPair         // ECDSA P-256 — used to sign SPK + as trust anchor
     signedPreKey: KeyPair
     oneTimePreKeys: KeyPair[]
 }
 
 /** Public-only projection of IdentityKeyBundle — safe to publish to server. */
 export interface PublicKeyBundle {
-    identityKey: string      // base64 raw public key
-    signedPreKey: string     // base64 raw public key
-    oneTimePreKeys: string[] // base64 raw public keys
+    identityKey: string             // base64 raw ECDH public key
+    signingKey: string              // base64 SPKI ECDSA public key
+    signedPreKey: string            // base64 raw public key
+    signedPreKeySignature: string   // base64 ECDSA(signingKey, signedPreKey)
+    oneTimePreKeys: string[]        // base64 raw public keys
 }
 
 /** Server response when Alice fetches Bob's keys. Server removes the OPK after delivery. */
 export interface RecipientKeyBundle {
-    identityKey: string       // base64
-    signedPreKey: string      // base64
-    oneTimePreKey: string | null  // base64, or null if pool is exhausted
+    identityKey: string             // base64 ECDH
+    signingKey: string              // base64 SPKI ECDSA
+    signedPreKey: string            // base64
+    signedPreKeySignature: string   // base64 ECDSA signature over signedPreKey
+    oneTimePreKey: string | null    // base64, or null if pool is exhausted
 }
 
 // -------------------------

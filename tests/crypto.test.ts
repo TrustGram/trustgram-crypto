@@ -22,27 +22,33 @@ test("createIdentity returns a full key bundle", async ({ page }) => {
         const kp = await TrustGramCrypto.createIdentity()
         return {
             hasIdentityKey: !!kp.identityKey,
+            hasSigningKey: !!kp.signingKey,
             hasSignedPreKey: !!kp.signedPreKey,
             hasOneTimePreKeys: kp.oneTimePreKeys.length === 10
         }
     })
     expect(result.hasIdentityKey).toBe(true)
+    expect(result.hasSigningKey).toBe(true)
     expect(result.hasSignedPreKey).toBe(true)
     expect(result.hasOneTimePreKeys).toBe(true)
 })
 
-test("public bundle exports correctly", async ({ page }) => {
+test("public bundle exports correctly with a valid SPK signature", async ({ page }) => {
     const result = await page.evaluate(async () => {
         const identity = await TrustGramCrypto.createIdentity()
         const bundle = await TrustGramCrypto.getPublicBundle(identity)
         return {
             hasIdentityKey: typeof bundle.identityKey === "string",
+            hasSigningKey: typeof bundle.signingKey === "string",
             hasSignedPreKey: typeof bundle.signedPreKey === "string",
+            hasSignature: typeof bundle.signedPreKeySignature === "string" && bundle.signedPreKeySignature.length > 0,
             hasOneTimePreKeys: bundle.oneTimePreKeys.length === 10
         }
     })
     expect(result.hasIdentityKey).toBe(true)
+    expect(result.hasSigningKey).toBe(true)
     expect(result.hasSignedPreKey).toBe(true)
+    expect(result.hasSignature).toBe(true)
     expect(result.hasOneTimePreKeys).toBe(true)
 })
 
@@ -68,7 +74,9 @@ async function setupSession(page: any) {
         const bobPublicBundle = await TrustGramCrypto.getPublicBundle(bob)
         const recipientBundle = {
             identityKey: bobPublicBundle.identityKey,
+            signingKey: bobPublicBundle.signingKey,
             signedPreKey: bobPublicBundle.signedPreKey,
+            signedPreKeySignature: bobPublicBundle.signedPreKeySignature,
             oneTimePreKey: bobPublicBundle.oneTimePreKeys[0]
         }
         const { state: aliceState, senderInfo } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
@@ -93,7 +101,9 @@ test("encrypt and decrypt round-trip", async ({ page }) => {
         const bobPublicBundle = await TrustGramCrypto.getPublicBundle(bob)
         const recipientBundle = {
             identityKey: bobPublicBundle.identityKey,
+            signingKey: bobPublicBundle.signingKey,
             signedPreKey: bobPublicBundle.signedPreKey,
+            signedPreKeySignature: bobPublicBundle.signedPreKeySignature,
             oneTimePreKey: bobPublicBundle.oneTimePreKeys[0]
         }
         const { state: aliceState, senderInfo } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
@@ -117,7 +127,9 @@ test("multiple messages in sequence", async ({ page }) => {
         const bobPublicBundle = await TrustGramCrypto.getPublicBundle(bob)
         const recipientBundle = {
             identityKey: bobPublicBundle.identityKey,
+            signingKey: bobPublicBundle.signingKey,
             signedPreKey: bobPublicBundle.signedPreKey,
+            signedPreKeySignature: bobPublicBundle.signedPreKeySignature,
             oneTimePreKey: bobPublicBundle.oneTimePreKeys[0]
         }
         const { state: aliceState0, senderInfo } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
@@ -157,7 +169,9 @@ test("bidirectional messaging", async ({ page }) => {
         const bobPublicBundle = await TrustGramCrypto.getPublicBundle(bob)
         const recipientBundle = {
             identityKey: bobPublicBundle.identityKey,
+            signingKey: bobPublicBundle.signingKey,
             signedPreKey: bobPublicBundle.signedPreKey,
+            signedPreKeySignature: bobPublicBundle.signedPreKeySignature,
             oneTimePreKey: bobPublicBundle.oneTimePreKeys[0]
         }
         const { state: aliceState0, senderInfo } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
@@ -192,7 +206,9 @@ test("empty string encrypts and decrypts", async ({ page }) => {
         const bobPublicBundle = await TrustGramCrypto.getPublicBundle(bob)
         const recipientBundle = {
             identityKey: bobPublicBundle.identityKey,
+            signingKey: bobPublicBundle.signingKey,
             signedPreKey: bobPublicBundle.signedPreKey,
+            signedPreKeySignature: bobPublicBundle.signedPreKeySignature,
             oneTimePreKey: bobPublicBundle.oneTimePreKeys[0]
         }
         const { state: aliceState, senderInfo } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
@@ -214,7 +230,9 @@ test("long message encrypts and decrypts", async ({ page }) => {
         const bobPublicBundle = await TrustGramCrypto.getPublicBundle(bob)
         const recipientBundle = {
             identityKey: bobPublicBundle.identityKey,
+            signingKey: bobPublicBundle.signingKey,
             signedPreKey: bobPublicBundle.signedPreKey,
+            signedPreKeySignature: bobPublicBundle.signedPreKeySignature,
             oneTimePreKey: bobPublicBundle.oneTimePreKeys[0]
         }
         const { state: aliceState, senderInfo } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
@@ -235,7 +253,9 @@ test("each message has unique ciphertext", async ({ page }) => {
         const bobPublicBundle = await TrustGramCrypto.getPublicBundle(bob)
         const recipientBundle = {
             identityKey: bobPublicBundle.identityKey,
+            signingKey: bobPublicBundle.signingKey,
             signedPreKey: bobPublicBundle.signedPreKey,
+            signedPreKeySignature: bobPublicBundle.signedPreKeySignature,
             oneTimePreKey: bobPublicBundle.oneTimePreKeys[0]
         }
         const { state: aliceState0 } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
@@ -257,7 +277,9 @@ test("tampered ciphertext fails to decrypt", async ({ page }) => {
         const bobPublicBundle = await TrustGramCrypto.getPublicBundle(bob)
         const recipientBundle = {
             identityKey: bobPublicBundle.identityKey,
+            signingKey: bobPublicBundle.signingKey,
             signedPreKey: bobPublicBundle.signedPreKey,
+            signedPreKeySignature: bobPublicBundle.signedPreKeySignature,
             oneTimePreKey: bobPublicBundle.oneTimePreKeys[0]
         }
         const { state: aliceState, senderInfo } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
@@ -285,7 +307,9 @@ test("wrong key fails to decrypt", async ({ page }) => {
         const bobPublicBundle = await TrustGramCrypto.getPublicBundle(bob)
         const recipientBundle = {
             identityKey: bobPublicBundle.identityKey,
+            signingKey: bobPublicBundle.signingKey,
             signedPreKey: bobPublicBundle.signedPreKey,
+            signedPreKeySignature: bobPublicBundle.signedPreKeySignature,
             oneTimePreKey: bobPublicBundle.oneTimePreKeys[0]
         }
         const { state: aliceState, senderInfo } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
@@ -295,7 +319,9 @@ test("wrong key fails to decrypt", async ({ page }) => {
         const evePublicBundle = await TrustGramCrypto.getPublicBundle(eve)
         const eveBundle = {
             identityKey: evePublicBundle.identityKey,
+            signingKey: evePublicBundle.signingKey,
             signedPreKey: evePublicBundle.signedPreKey,
+            signedPreKeySignature: evePublicBundle.signedPreKeySignature,
             oneTimePreKey: evePublicBundle.oneTimePreKeys[0]
         }
         const { state: aliceEveState, senderInfo: eveSenderInfo } = await TrustGramCrypto.initiateSession(alice, eveBundle)
@@ -321,7 +347,9 @@ test("two sessions are independent", async ({ page }) => {
         // Session 1
         const bundle1 = {
             identityKey: bobPublicBundle.identityKey,
+            signingKey: bobPublicBundle.signingKey,
             signedPreKey: bobPublicBundle.signedPreKey,
+            signedPreKeySignature: bobPublicBundle.signedPreKeySignature,
             oneTimePreKey: bobPublicBundle.oneTimePreKeys[0]
         }
         const { state: aliceState1, senderInfo: si1 } = await TrustGramCrypto.initiateSession(alice, bundle1)
@@ -332,7 +360,9 @@ test("two sessions are independent", async ({ page }) => {
         // Session 2 (different OPK)
         const bundle2 = {
             identityKey: bobPublicBundle.identityKey,
+            signingKey: bobPublicBundle.signingKey,
             signedPreKey: bobPublicBundle.signedPreKey,
+            signedPreKeySignature: bobPublicBundle.signedPreKeySignature,
             oneTimePreKey: bobPublicBundle.oneTimePreKeys[1]
         }
         const { state: aliceState2, senderInfo: si2 } = await TrustGramCrypto.initiateSession(alice, bundle2)
@@ -353,10 +383,10 @@ test("fingerprint is same for both parties", async ({ page }) => {
     const result = await page.evaluate(async () => {
         const alice = await TrustGramCrypto.createIdentity()
         const bob = await TrustGramCrypto.createIdentity()
-        const alicePub = (await TrustGramCrypto.getPublicBundle(alice)).identityKey
-        const bobPub = (await TrustGramCrypto.getPublicBundle(bob)).identityKey
-        const fp1 = await TrustGramCrypto.computeFingerprint(alice, bobPub)
-        const fp2 = await TrustGramCrypto.computeFingerprint(bob, alicePub)
+        const alicePub = await TrustGramCrypto.getPublicBundle(alice)
+        const bobPub = await TrustGramCrypto.getPublicBundle(bob)
+        const fp1 = await TrustGramCrypto.computeFingerprint(alice, bobPub.identityKey, bobPub.signingKey)
+        const fp2 = await TrustGramCrypto.computeFingerprint(bob, alicePub.identityKey, alicePub.signingKey)
         return { fp1: fp1.hex, fp2: fp2.hex }
     })
     expect(result.fp1).toBe(result.fp2)
@@ -367,11 +397,27 @@ test("fingerprint differs for different pairs", async ({ page }) => {
         const alice = await TrustGramCrypto.createIdentity()
         const bob = await TrustGramCrypto.createIdentity()
         const eve = await TrustGramCrypto.createIdentity()
-        const bobPub = (await TrustGramCrypto.getPublicBundle(bob)).identityKey
-        const evePub = (await TrustGramCrypto.getPublicBundle(eve)).identityKey
-        const fp1 = await TrustGramCrypto.computeFingerprint(alice, bobPub)
-        const fp2 = await TrustGramCrypto.computeFingerprint(alice, evePub)
+        const bobPub = await TrustGramCrypto.getPublicBundle(bob)
+        const evePub = await TrustGramCrypto.getPublicBundle(eve)
+        const fp1 = await TrustGramCrypto.computeFingerprint(alice, bobPub.identityKey, bobPub.signingKey)
+        const fp2 = await TrustGramCrypto.computeFingerprint(alice, evePub.identityKey, evePub.signingKey)
         return fp1.hex !== fp2.hex
+    })
+    expect(result).toBe(true)
+})
+
+test("fingerprint changes if signingKey is swapped", async ({ page }) => {
+    // Without binding the signingKey, an attacker could swap one half undetected.
+    const result = await page.evaluate(async () => {
+        const alice = await TrustGramCrypto.createIdentity()
+        const bob = await TrustGramCrypto.createIdentity()
+        const mallory = await TrustGramCrypto.createIdentity()
+        const bobPub = await TrustGramCrypto.getPublicBundle(bob)
+        const malloryPub = await TrustGramCrypto.getPublicBundle(mallory)
+        const fpReal = await TrustGramCrypto.computeFingerprint(alice, bobPub.identityKey, bobPub.signingKey)
+        // Same identityKey, swapped signingKey
+        const fpMitm = await TrustGramCrypto.computeFingerprint(alice, bobPub.identityKey, malloryPub.signingKey)
+        return fpReal.hex !== fpMitm.hex
     })
     expect(result).toBe(true)
 })
@@ -380,11 +426,90 @@ test("fingerprint display format is readable", async ({ page }) => {
     const result = await page.evaluate(async () => {
         const alice = await TrustGramCrypto.createIdentity()
         const bob = await TrustGramCrypto.createIdentity()
-        const bobPub = (await TrustGramCrypto.getPublicBundle(bob)).identityKey
-        const fp = await TrustGramCrypto.computeFingerprint(alice, bobPub)
+        const bobPub = await TrustGramCrypto.getPublicBundle(bob)
+        const fp = await TrustGramCrypto.computeFingerprint(alice, bobPub.identityKey, bobPub.signingKey)
         return fp.display
     })
     expect(result).toMatch(/^[0-9a-f]{4}( [0-9a-f]{4})+$/)
+})
+
+// -------------------------
+// SPK Signature
+// -------------------------
+
+test("x3dhSend rejects a bundle with an invalid SPK signature", async ({ page }) => {
+    const error = await page.evaluate(async () => {
+        const alice = await TrustGramCrypto.createIdentity()
+        const bob = await TrustGramCrypto.createIdentity()
+        const bobPub = await TrustGramCrypto.getPublicBundle(bob)
+        // Flip a byte in the base64 signature
+        const sigBytes = atob(bobPub.signedPreKeySignature)
+        const tamperedSig = btoa(String.fromCharCode((sigBytes.charCodeAt(0) ^ 1)) + sigBytes.slice(1))
+        const bundle = {
+            identityKey: bobPub.identityKey,
+            signingKey: bobPub.signingKey,
+            signedPreKey: bobPub.signedPreKey,
+            signedPreKeySignature: tamperedSig,
+            oneTimePreKey: bobPub.oneTimePreKeys[0]
+        }
+        try {
+            await TrustGramCrypto.initiateSession(alice, bundle)
+            return null
+        } catch (e: any) {
+            return e.message
+        }
+    })
+    expect(error).toContain("Invalid SPK signature")
+})
+
+test("x3dhSend rejects a bundle whose signingKey doesn't match the signer", async ({ page }) => {
+    // MITM swaps Bob's SPK + signature for Mallory's, but leaves Bob's signingKey.
+    const error = await page.evaluate(async () => {
+        const alice = await TrustGramCrypto.createIdentity()
+        const bob = await TrustGramCrypto.createIdentity()
+        const mallory = await TrustGramCrypto.createIdentity()
+        const bobPub = await TrustGramCrypto.getPublicBundle(bob)
+        const malloryPub = await TrustGramCrypto.getPublicBundle(mallory)
+        const bundle = {
+            identityKey: bobPub.identityKey,
+            signingKey: bobPub.signingKey,                            // Bob's signing key…
+            signedPreKey: malloryPub.signedPreKey,                    // …but Mallory's SPK
+            signedPreKeySignature: malloryPub.signedPreKeySignature,  // signed by Mallory
+            oneTimePreKey: bobPub.oneTimePreKeys[0]
+        }
+        try {
+            await TrustGramCrypto.initiateSession(alice, bundle)
+            return null
+        } catch (e: any) {
+            return e.message
+        }
+    })
+    expect(error).toContain("Invalid SPK signature")
+})
+
+test("signSPK produces a verifiable signature for a fresh SPK (rotation)", async ({ page }) => {
+    const result = await page.evaluate(async () => {
+        const alice = await TrustGramCrypto.createIdentity()
+        const bob = await TrustGramCrypto.createIdentity()
+        const newSpk = await crypto.subtle.generateKey(
+            { name: "ECDH", namedCurve: "P-256" }, false, ["deriveKey", "deriveBits"]
+        ) as CryptoKeyPair
+        const newSig = await TrustGramCrypto.signSPK(bob, newSpk)
+        const newSpkRaw = await crypto.subtle.exportKey("raw", newSpk.publicKey)
+        const newSpkB64 = btoa(String.fromCharCode(...new Uint8Array(newSpkRaw)))
+        const bobPub = await TrustGramCrypto.getPublicBundle(bob)
+        const bundle = {
+            identityKey: bobPub.identityKey,
+            signingKey: bobPub.signingKey,
+            signedPreKey: newSpkB64,
+            signedPreKeySignature: newSig,
+            oneTimePreKey: bobPub.oneTimePreKeys[0]
+        }
+        // Should not throw
+        await TrustGramCrypto.initiateSession(alice, bundle)
+        return "ok"
+    })
+    expect(result).toBe("ok")
 })
 
 // -------------------------
@@ -398,7 +523,9 @@ test("out-of-order message delivery using skipped keys", async ({ page }) => {
         const bobPublicBundle = await TrustGramCrypto.getPublicBundle(bob)
         const recipientBundle = {
             identityKey: bobPublicBundle.identityKey,
+            signingKey: bobPublicBundle.signingKey,
             signedPreKey: bobPublicBundle.signedPreKey,
+            signedPreKeySignature: bobPublicBundle.signedPreKeySignature,
             oneTimePreKey: bobPublicBundle.oneTimePreKeys[0]
         }
         const { state: aliceState0, senderInfo } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
@@ -430,7 +557,9 @@ test("too many skipped messages throws", async ({ page }) => {
         const bobPublicBundle = await TrustGramCrypto.getPublicBundle(bob)
         const recipientBundle = {
             identityKey: bobPublicBundle.identityKey,
+            signingKey: bobPublicBundle.signingKey,
             signedPreKey: bobPublicBundle.signedPreKey,
+            signedPreKeySignature: bobPublicBundle.signedPreKeySignature,
             oneTimePreKey: bobPublicBundle.oneTimePreKeys[0]
         }
         const { state: aliceState0, senderInfo } = await TrustGramCrypto.initiateSession(alice, recipientBundle)
@@ -465,7 +594,9 @@ test("acceptSession throws with unknown one-time pre-key", async ({ page }) => {
         const bobPublicBundle = await TrustGramCrypto.getPublicBundle(bob)
         const recipientBundle = {
             identityKey: bobPublicBundle.identityKey,
+            signingKey: bobPublicBundle.signingKey,
             signedPreKey: bobPublicBundle.signedPreKey,
+            signedPreKeySignature: bobPublicBundle.signedPreKeySignature,
             oneTimePreKey: bobPublicBundle.oneTimePreKeys[0]
         }
         const { senderInfo } = await TrustGramCrypto.initiateSession(alice, recipientBundle)

@@ -165,3 +165,60 @@ export async function aesDecrypt(
 export async function sha256(data: ArrayBuffer): Promise<ArrayBuffer> {
     return crypto.subtle.digest("SHA-256", data)
 }
+
+// -------------------------
+// ECDSA P-256 (signing)
+// -------------------------
+
+/**
+ * Generate a non-extractable ECDSA P-256 signing key pair.
+ * Public key is extractable so we can publish it; private stays in WebCrypto.
+ */
+export async function generateSigningKeyPair(): Promise<KeyPair> {
+    return crypto.subtle.generateKey(
+        { name: "ECDSA", namedCurve: "P-256" },
+        false,
+        ["sign", "verify"]
+    ) as Promise<KeyPair>
+}
+
+/** Export an ECDSA public key as base64 SPKI (DER). */
+export async function exportSigningPublicKey(key: CryptoKey): Promise<string> {
+    const spki = await crypto.subtle.exportKey("spki", key)
+    return toBase64(spki)
+}
+
+/** Import a base64 SPKI ECDSA public key for verification. */
+export async function importSigningPublicKey(b64: string): Promise<CryptoKey> {
+    return crypto.subtle.importKey(
+        "spki",
+        fromBase64(b64),
+        { name: "ECDSA", namedCurve: "P-256" },
+        true,
+        ["verify"]
+    )
+}
+
+/** Sign a message with ECDSA P-256 + SHA-256. Returns base64 signature (raw r||s). */
+export async function ecdsaSign(privateKey: CryptoKey, message: ArrayBuffer): Promise<string> {
+    const sig = await crypto.subtle.sign(
+        { name: "ECDSA", hash: "SHA-256" },
+        privateKey,
+        message
+    )
+    return toBase64(sig)
+}
+
+/** Verify an ECDSA P-256 + SHA-256 signature. */
+export async function ecdsaVerify(
+    publicKey: CryptoKey,
+    signatureB64: string,
+    message: ArrayBuffer
+): Promise<boolean> {
+    return crypto.subtle.verify(
+        { name: "ECDSA", hash: "SHA-256" },
+        publicKey,
+        fromBase64(signatureB64),
+        message
+    )
+}
