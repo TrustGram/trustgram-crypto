@@ -42,7 +42,10 @@ export interface RecipientKeyBundle {
 export interface X3DHSenderBundle {
     identityKey: string          // base64 — Alice's IK pub
     ephemeralKey: string         // base64 — Alice's EK pub
-    oneTimePreKeyId: string | null  // OPK used, or null if no OPK was available
+    // The OPK's *public key* (base64), NOT its local key_id. The field is named
+    // "Id" for wire-compat with earlier versions; treat it as a public key when
+    // matching against Bob's stored OPKs.
+    oneTimePreKeyId: string | null
 }
 
 export interface X3DHResult {
